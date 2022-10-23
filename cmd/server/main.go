@@ -70,7 +70,6 @@ func handleTCP(tcp *net.TCPConn) {
 				return
 			}
 		} else if path == "/" {
-			// 输出tcp对面客户端的地址
 			goout.LogInfo(tcp.RemoteAddr().String() + "-" + tcp.LocalAddr().String())
 			_, err := goout.WriteHttpResponseWithCt(tcp, []byte("Hello,GFW"), "text/plain; charset=utf-8")
 			if err != nil {

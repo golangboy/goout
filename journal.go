@@ -7,9 +7,6 @@ import (
 	"strconv"
 )
 
-var addr string
-var server string
-
 func init() {
 	fs, _ := os.Create("journal.log")
 	log.SetOutput(fs)
