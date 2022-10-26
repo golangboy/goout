@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
-	"github.com/goccy/go-json"
 	"goout"
 	"net"
 	"os"
@@ -16,14 +16,19 @@ var addr string
 var trafficLog *os.File
 
 const (
-	SEND = 1
-	RECV = 2
-	CONN = 3
+	SEND  = 1
+	RECV  = 2
+	CONN  = 3
+	CLOSE = 4
 )
 
 type traffic struct {
-	TotalSend int64
-	TotalRecv int64
+	TotalSend   int64
+	TotalRecv   int64
+	Host        string
+	IpAddr      string
+	LastConn    string
+	Description string
 }
 type summaryTraffic struct {
 	sync.Mutex
@@ -39,6 +44,8 @@ var summary summaryTraffic
 func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, trafficType int) {
 	//remote port
 	goOutClientAddr = goOutClientAddr[:strings.LastIndex(goOutClientAddr, ":")]
+	// lookup
+	targetIpAddr, _ := net.LookupHost(targetAddr[:strings.LastIndex(targetAddr, ":")])
 	summary.Lock()
 	defer summary.Unlock()
 	if summary.Detail == nil {
@@ -48,8 +55,12 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 		summary.Detail[goOutClientAddr] = make(map[string]*traffic)
 	}
 	if summary.Detail[goOutClientAddr][targetAddr] == nil {
-		summary.Detail[goOutClientAddr][targetAddr] = &traffic{}
+		summary.Detail[goOutClientAddr][targetAddr] = &traffic{
+			Description: goout.QueryIp(targetIpAddr[0]),
+		}
 	}
+	summary.Detail[goOutClientAddr][targetAddr].Host = targetAddr[:strings.LastIndex(targetAddr, ":")]
+	summary.Detail[goOutClientAddr][targetAddr].IpAddr = targetIpAddr[0]
 	switch trafficType {
 	case SEND:
 		summary.Detail[goOutClientAddr][targetAddr].TotalSend += int64(dataLength)
@@ -57,12 +68,29 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 	case RECV:
 		summary.Detail[goOutClientAddr][targetAddr].TotalRecv += int64(dataLength)
 		summary.TotalRecv += int64(dataLength)
+	case CONN:
+		summary.Detail[goOutClientAddr][targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
+		summary.TotalConn++
+	case CLOSE:
+		summary.TotalConn--
 	}
 }
 
 func handleTCP(tcp *net.TCPConn) {
 	var ioBuffer bytes.Buffer
 	var tcpWithTarget *net.TCPConn
+	var targetHost string
+	defer func() {
+		if err := recover(); err != nil {
+			goout.LogError(err)
+			goout.LogError(targetHost)
+		}
+	}()
+	defer func() {
+		if tcpWithTarget != nil {
+			recordTraffic(targetHost, tcp.RemoteAddr().String(), 0, CLOSE)
+		}
+	}()
 	for {
 		req, ok := goout.ParseHttpRequest(tcp, &ioBuffer)
 		if !ok {
@@ -74,7 +102,7 @@ func handleTCP(tcp *net.TCPConn) {
 		}
 		path := req.Url
 		if path == "/conn" {
-			targetHost := string(req.Body)
+			targetHost = string(req.Body)
 			tcpAddr, err := net.ResolveTCPAddr("tcp4", targetHost)
 			if err != nil {
 				return
@@ -112,12 +140,12 @@ func handleTCP(tcp *net.TCPConn) {
 						proxyClient.Close()
 						return
 					}
-					recordTraffic(target.RemoteAddr().String(), proxyClient.RemoteAddr().String(), n, RECV)
+					recordTraffic(targetHost, proxyClient.RemoteAddr().String(), n, RECV)
 				}
 			}(tcpWithTarget, tcp)
 		} else if path == "/send" {
 			n, err := tcpWithTarget.Write(req.Body)
-			recordTraffic(tcpWithTarget.RemoteAddr().String(), tcp.RemoteAddr().String(), n, SEND)
+			recordTraffic(targetHost, tcp.RemoteAddr().String(), n, SEND)
 			if err != nil {
 				tcpWithTarget.Close()
 				tcp.Close()
@@ -151,34 +179,36 @@ func startServer() {
 		}
 	}
 }
+func startLog() {
+	fileName := time.Now().Format("2006-01-02-15-04-05") + ".json"
+	// 1秒钟写一次
+	ticker := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			trafficLog, err := os.Create(fileName)
+			if err != nil {
+				return
+			}
+			summary.Lock()
+			marshal, _ := json.Marshal(summary)
+			// 格式化输出
+			var out bytes.Buffer
+			json.Indent(&out, marshal, "", "\t")
+			trafficLog.Write(out.Bytes())
+			//trafficLog.Write(marshal)
+			summary.Unlock()
+			trafficLog.Close()
+		}
+
+	}
+}
 func main() {
 	flag.StringVar(&addr, "addr", ":80", "server bind address")
 	flag.StringVar(&webAddr, "web", ":8080", "web server bind address")
 	flag.Parse()
 	go startWebServer()
 	go startServer()
-	go func() {
-		fileName := time.Now().Format("2006-01-02-15-04-05") + ".json"
-		// 1秒钟写一次
-		ticker := time.NewTicker(time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				trafficLog, err := os.Create(fileName)
-				if err != nil {
-					return
-				}
-				summary.Lock()
-				marshal, _ := json.Marshal(summary)
-				// 格式化输出
-				var out bytes.Buffer
-				json.Indent(&out, marshal, "", "\t")
-				trafficLog.Write(out.Bytes())
-				//trafficLog.Write(marshal)
-				summary.Unlock()
-				trafficLog.Close()
-			}
-		}
-	}()
+	go startLog()
 	select {}
 }
