@@ -31,12 +31,17 @@ type traffic struct {
 	LastConn    string
 	Description string
 }
+type goOutClient struct {
+	Addr        string
+	Description string
+	Traffic     map[string]*traffic
+}
 type summaryTraffic struct {
 	sync.Mutex
 	TotalSend int64
 	TotalRecv int64
 	TotalConn int64
-	Detail    map[string]map[string]*traffic
+	Detail    map[string]*goOutClient
 }
 
 var summary summaryTraffic
@@ -71,44 +76,47 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 	}
 
 	if summary.Detail == nil {
-		summary.Detail = make(map[string]map[string]*traffic)
+		summary.Detail = make(map[string]*goOutClient)
 	}
 	if summary.Detail[goOutClientAddr] == nil {
-		summary.Detail[goOutClientAddr] = make(map[string]*traffic)
+		summary.Detail[goOutClientAddr] = &goOutClient{
+			Addr:        goOutClientAddr,
+			Description: goout.QueryIp(goOutClientAddr),
+			Traffic:     make(map[string]*traffic),
+		}
 	}
 	if updateIdx == len(goOutClientList) {
 		goOutClientList = reflect.ValueOf(summary.Detail).MapKeys()
 		updateIdx = 0
 	}
-	if summary.Detail[goOutClientAddr][targetDomain+targetPort] == nil {
-		summary.Detail[goOutClientAddr][targetDomain+targetPort] = &traffic{
-			Description: goout.QueryIp(targetIpAddr[0]),
-		}
+	if summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort] == nil {
+		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort] = &traffic{}
 	}
-	summary.Detail[goOutClientAddr][targetDomain+targetPort].Host = targetDomain
-	summary.Detail[goOutClientAddr][targetDomain+targetPort].IpAddr = targetIpAddr[0]
+	summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].Host = targetDomain
+	summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].IpAddr = targetIpAddr[0]
+	summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].Description = goout.QueryIp(targetIpAddr[0])
 	switch trafficType {
 	case SEND:
-		summary.Detail[goOutClientAddr][targetDomain+targetPort].TotalSend += int64(dataLength)
+		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].TotalSend += int64(dataLength)
 		summary.TotalSend += int64(dataLength)
 	case RECV:
-		summary.Detail[goOutClientAddr][targetDomain+targetPort].TotalRecv += int64(dataLength)
+		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].TotalRecv += int64(dataLength)
 		summary.TotalRecv += int64(dataLength)
 	case CONN:
-		summary.Detail[goOutClientAddr][targetDomain+targetPort].LastConn = time.Now().Format("2006-01-02 15:04:05")
+		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].LastConn = time.Now().Format("2006-01-02 15:04:05")
 		summary.TotalConn++
 	case CLOSE:
 		summary.TotalConn--
 	}
 	updateGooutAddr := goOutClientList[updateIdx].String()
 	if summary.Detail[updateGooutAddr] != nil {
-		if byHost && nil != summary.Detail[updateGooutAddr][targetIpAddr[0]+targetPort] {
-			summary.Detail[updateGooutAddr][targetAddr].IpAddr = targetIpAddr[0]
-			summary.Detail[updateGooutAddr][targetAddr].Host = targetDomain
-			summary.Detail[updateGooutAddr][targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
-			summary.Detail[updateGooutAddr][targetAddr].TotalSend += summary.Detail[updateGooutAddr][targetIpAddr[0]].TotalSend
-			summary.Detail[updateGooutAddr][targetAddr].TotalRecv += summary.Detail[updateGooutAddr][targetIpAddr[0]].TotalRecv
-			delete(summary.Detail[updateGooutAddr], targetIpAddr[0]+targetPort)
+		if byHost && nil != summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort] {
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].IpAddr = targetIpAddr[0]
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].Host = targetDomain
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalSend += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]].TotalSend
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalRecv += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]].TotalRecv
+			delete(summary.Detail[updateGooutAddr].Traffic, targetIpAddr[0]+targetPort)
 			updateIdx++
 		}
 	}
