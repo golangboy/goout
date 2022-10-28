@@ -7,6 +7,7 @@ import (
 	"goout"
 	"net"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -39,40 +40,75 @@ type summaryTraffic struct {
 }
 
 var summary summaryTraffic
+var hostRecord = make(map[string]string)
+var goOutClientList []reflect.Value
+var updateIdx int
 
 // recordTraffic is a function to record traffic
 func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, trafficType int) {
-	//remote port
-	goOutClientAddr = goOutClientAddr[:strings.LastIndex(goOutClientAddr, ":")]
-	// lookup
-	targetIpAddr, _ := net.LookupHost(targetAddr[:strings.LastIndex(targetAddr, ":")])
 	summary.Lock()
 	defer summary.Unlock()
+
+	//remote port
+	goOutClientAddr = goOutClientAddr[:strings.LastIndex(goOutClientAddr, ":")]
+	//target port
+	targetPort := targetAddr[strings.LastIndex(targetAddr, ":"):]
+	// lookup
+	targetIpAddr, _ := net.LookupHost(targetAddr[:strings.LastIndex(targetAddr, ":")])
+
+	targetDomain := targetAddr[:strings.LastIndex(targetAddr, ":")]
+
+	byHost := false
+	// record hostname
+	if net.ParseIP(targetAddr[:strings.LastIndex(targetAddr, ":")]) == nil {
+		byHost = true
+		hostRecord[targetIpAddr[0]] = targetAddr[:strings.LastIndex(targetAddr, ":")]
+	} else {
+		// www.google.com:443
+		targetDomain = hostRecord[targetIpAddr[0]]
+	}
+
 	if summary.Detail == nil {
 		summary.Detail = make(map[string]map[string]*traffic)
 	}
 	if summary.Detail[goOutClientAddr] == nil {
 		summary.Detail[goOutClientAddr] = make(map[string]*traffic)
 	}
-	if summary.Detail[goOutClientAddr][targetAddr] == nil {
-		summary.Detail[goOutClientAddr][targetAddr] = &traffic{
+	if updateIdx == len(goOutClientList) {
+		goOutClientList = reflect.ValueOf(summary.Detail).MapKeys()
+		updateIdx = 0
+	}
+	if summary.Detail[goOutClientAddr][targetDomain+targetPort] == nil {
+		summary.Detail[goOutClientAddr][targetDomain+targetPort] = &traffic{
 			Description: goout.QueryIp(targetIpAddr[0]),
 		}
 	}
-	summary.Detail[goOutClientAddr][targetAddr].Host = targetAddr[:strings.LastIndex(targetAddr, ":")]
-	summary.Detail[goOutClientAddr][targetAddr].IpAddr = targetIpAddr[0]
+	summary.Detail[goOutClientAddr][targetDomain+targetPort].Host = targetDomain
+	summary.Detail[goOutClientAddr][targetDomain+targetPort].IpAddr = targetIpAddr[0]
 	switch trafficType {
 	case SEND:
-		summary.Detail[goOutClientAddr][targetAddr].TotalSend += int64(dataLength)
+		summary.Detail[goOutClientAddr][targetDomain+targetPort].TotalSend += int64(dataLength)
 		summary.TotalSend += int64(dataLength)
 	case RECV:
-		summary.Detail[goOutClientAddr][targetAddr].TotalRecv += int64(dataLength)
+		summary.Detail[goOutClientAddr][targetDomain+targetPort].TotalRecv += int64(dataLength)
 		summary.TotalRecv += int64(dataLength)
 	case CONN:
-		summary.Detail[goOutClientAddr][targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
+		summary.Detail[goOutClientAddr][targetDomain+targetPort].LastConn = time.Now().Format("2006-01-02 15:04:05")
 		summary.TotalConn++
 	case CLOSE:
 		summary.TotalConn--
+	}
+	updateGooutAddr := goOutClientList[updateIdx].String()
+	if summary.Detail[updateGooutAddr] != nil {
+		if byHost && nil != summary.Detail[updateGooutAddr][targetIpAddr[0]] {
+			summary.Detail[updateGooutAddr][targetAddr].IpAddr = targetIpAddr[0]
+			summary.Detail[updateGooutAddr][targetAddr].Host = targetDomain
+			summary.Detail[updateGooutAddr][targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
+			summary.Detail[updateGooutAddr][targetAddr].TotalSend += summary.Detail[updateGooutAddr][targetIpAddr[0]].TotalSend
+			summary.Detail[updateGooutAddr][targetAddr].TotalRecv += summary.Detail[updateGooutAddr][targetIpAddr[0]].TotalRecv
+			delete(summary.Detail[updateGooutAddr], targetIpAddr[0])
+			updateIdx++
+		}
 	}
 }
 
@@ -152,7 +188,8 @@ func handleTCP(tcp *net.TCPConn) {
 				return
 			}
 		} else if path == "/" {
-			goout.LogInfo(tcp.RemoteAddr().String() + "-" + tcp.LocalAddr().String())
+			remoteAddr := tcp.RemoteAddr().String()
+			goout.LogInfo(remoteAddr + "(" + goout.QueryIp(remoteAddr[:strings.LastIndex(remoteAddr, ":")]) + ")" + "-" + tcp.LocalAddr().String())
 			_, err := goout.WriteHttpResponseWithCt(tcp, []byte("Hello,GFW"), "text/plain; charset=utf-8")
 			if err != nil {
 				tcpWithTarget.Close()
