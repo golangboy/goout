@@ -105,21 +105,22 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 	case CONN:
 		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].LastConn = time.Now().Format("2006-01-02 15:04:05")
 		summary.TotalConn++
-	case CLOSE:
-		summary.TotalConn--
 	}
 	updateGooutAddr := goOutClientList[updateIdx].String()
 	if summary.Detail[updateGooutAddr] != nil {
 		if byHost && nil != summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort] {
+			if summary.Detail[updateGooutAddr].Traffic[targetAddr] == nil {
+				summary.Detail[updateGooutAddr].Traffic[targetAddr] = &traffic{}
+			}
 			summary.Detail[updateGooutAddr].Traffic[targetAddr].IpAddr = targetIpAddr[0]
 			summary.Detail[updateGooutAddr].Traffic[targetAddr].Host = targetDomain
 			summary.Detail[updateGooutAddr].Traffic[targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
-			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalSend += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]].TotalSend
-			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalRecv += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]].TotalRecv
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalSend += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort].TotalSend
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalRecv += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort].TotalRecv
 			delete(summary.Detail[updateGooutAddr].Traffic, targetIpAddr[0]+targetPort)
-			updateIdx++
 		}
 	}
+	updateIdx++
 }
 
 func handleTCP(tcp *net.TCPConn) {
@@ -171,14 +172,12 @@ func handleTCP(tcp *net.TCPConn) {
 					//target.SetReadDeadline(time.Now().Add(time.Second * 300))
 					n, err := target.Read(buff[:])
 					if err != nil {
-						recordTraffic(target.RemoteAddr().String(), tcp.RemoteAddr().String(), 0, CLOSE)
 						target.Close()
 						proxyClient.Close()
 						return
 					}
 					n, err = goout.WriteHttpResponse(proxyClient, buff[:n])
 					if err != nil {
-						recordTraffic(target.RemoteAddr().String(), tcp.RemoteAddr().String(), 0, CLOSE)
 						target.Close()
 						proxyClient.Close()
 						return
