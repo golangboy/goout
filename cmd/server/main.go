@@ -65,7 +65,9 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 		hostRecord[targetIpAddr[0]] = targetAddr[:strings.LastIndex(targetAddr, ":")]
 	} else {
 		// www.google.com
-		targetDomain = hostRecord[targetIpAddr[0]]
+		if hostRecord[targetIpAddr[0]] != "" {
+			targetDomain = hostRecord[targetIpAddr[0]]
+		}
 	}
 
 	if summary.Detail == nil {
