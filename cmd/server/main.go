@@ -28,6 +28,7 @@ type traffic struct {
 	TotalRecv   int64
 	Host        string
 	IpAddr      string
+	ConnCnt     int64
 	LastConn    string
 	Description string
 }
@@ -103,6 +104,7 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].TotalRecv += int64(dataLength)
 		summary.TotalRecv += int64(dataLength)
 	case CONN:
+		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].ConnCnt++
 		summary.Detail[goOutClientAddr].Traffic[targetDomain+targetPort].LastConn = time.Now().Format("2006-01-02 15:04:05")
 		summary.TotalConn++
 	}
@@ -117,6 +119,7 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 			summary.Detail[updateGooutAddr].Traffic[targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
 			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalSend += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort].TotalSend
 			summary.Detail[updateGooutAddr].Traffic[targetAddr].TotalRecv += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort].TotalRecv
+			summary.Detail[updateGooutAddr].Traffic[targetAddr].ConnCnt += summary.Detail[updateGooutAddr].Traffic[targetIpAddr[0]+targetPort].ConnCnt
 			delete(summary.Detail[updateGooutAddr].Traffic, targetIpAddr[0]+targetPort)
 		}
 	}
