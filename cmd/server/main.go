@@ -64,7 +64,7 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 		byHost = true
 		hostRecord[targetIpAddr[0]] = targetAddr[:strings.LastIndex(targetAddr, ":")]
 	} else {
-		// www.google.com:443
+		// www.google.com
 		targetDomain = hostRecord[targetIpAddr[0]]
 	}
 
@@ -100,13 +100,13 @@ func recordTraffic(targetAddr string, goOutClientAddr string, dataLength int, tr
 	}
 	updateGooutAddr := goOutClientList[updateIdx].String()
 	if summary.Detail[updateGooutAddr] != nil {
-		if byHost && nil != summary.Detail[updateGooutAddr][targetIpAddr[0]] {
+		if byHost && nil != summary.Detail[updateGooutAddr][targetIpAddr[0]+targetPort] {
 			summary.Detail[updateGooutAddr][targetAddr].IpAddr = targetIpAddr[0]
 			summary.Detail[updateGooutAddr][targetAddr].Host = targetDomain
 			summary.Detail[updateGooutAddr][targetAddr].LastConn = time.Now().Format("2006-01-02 15:04:05")
 			summary.Detail[updateGooutAddr][targetAddr].TotalSend += summary.Detail[updateGooutAddr][targetIpAddr[0]].TotalSend
 			summary.Detail[updateGooutAddr][targetAddr].TotalRecv += summary.Detail[updateGooutAddr][targetIpAddr[0]].TotalRecv
-			delete(summary.Detail[updateGooutAddr], targetIpAddr[0])
+			delete(summary.Detail[updateGooutAddr], targetIpAddr[0]+targetPort)
 			updateIdx++
 		}
 	}
@@ -120,11 +120,6 @@ func handleTCP(tcp *net.TCPConn) {
 		if err := recover(); err != nil {
 			goout.LogError(err)
 			goout.LogError(targetHost)
-		}
-	}()
-	defer func() {
-		if tcpWithTarget != nil {
-			recordTraffic(targetHost, tcp.RemoteAddr().String(), 0, CLOSE)
 		}
 	}()
 	for {
@@ -166,12 +161,14 @@ func handleTCP(tcp *net.TCPConn) {
 					//target.SetReadDeadline(time.Now().Add(time.Second * 300))
 					n, err := target.Read(buff[:])
 					if err != nil {
+						recordTraffic(target.RemoteAddr().String(), tcp.RemoteAddr().String(), 0, CLOSE)
 						target.Close()
 						proxyClient.Close()
 						return
 					}
 					n, err = goout.WriteHttpResponse(proxyClient, buff[:n])
 					if err != nil {
+						recordTraffic(target.RemoteAddr().String(), tcp.RemoteAddr().String(), 0, CLOSE)
 						target.Close()
 						proxyClient.Close()
 						return
