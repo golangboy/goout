@@ -227,8 +227,8 @@ func startServer() {
 }
 func startLog() {
 	fileName := time.Now().Format("2006-01-02-15-04-05") + ".json"
-	// 1秒钟写一次
-	ticker := time.NewTicker(time.Second)
+	// 1小时写一次
+	ticker := time.NewTicker(time.Hour)
 	for {
 		select {
 		case <-ticker.C:
@@ -243,8 +243,13 @@ func startLog() {
 			json.Indent(&out, marshal, "", "\t")
 			trafficLog.Write(out.Bytes())
 			//trafficLog.Write(marshal)
+			summary.Detail = nil
+			summary.TotalRecv = 0
+			summary.TotalSend = 0
+			summary.TotalConn = 0
 			summary.Unlock()
 			trafficLog.Close()
+			fileName = time.Now().Format("2006-01-02-15-04-05") + ".json"
 		}
 
 	}
