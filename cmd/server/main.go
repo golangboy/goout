@@ -148,11 +148,10 @@ func handleTCP(tcp *net.TCPConn) {
 		}
 		path := req.Url
 		if path == "/conn" {
-			var baseResult [100]byte
-			n, err := base64.StdEncoding.Decode(baseResult[:], req.Body)
+			baseResult, err := base64.StdEncoding.DecodeString(string(req.Body))
 			// 旧版本客户端不用base64编码
 			if err == nil {
-				targetHost = string(baseResult[:n])
+				targetHost = string(baseResult)
 			} else {
 				targetHost = string(req.Body)
 			}
@@ -264,7 +263,7 @@ func startLog() {
 }
 func main() {
 	flag.StringVar(&addr, "addr", ":80", "server bind address")
-	flag.StringVar(&webAddr, "web", ":8080", "web server bind address")
+	flag.StringVar(&webAddr, "web", ":8081", "web server bind address")
 	flag.Parse()
 	go startWebServer()
 	go startServer()

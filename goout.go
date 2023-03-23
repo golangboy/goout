@@ -24,9 +24,8 @@ func (g *GoOutCli) Dial(gooutServer string, target string) error {
 		return err
 	}
 	g.conn = conn
-	var baseResult [100]byte
-	base64.StdEncoding.Encode(baseResult[:], []byte(target))
-	WriteHttpRequest(conn, "/conn", baseResult[:])
+	baseResult := base64.StdEncoding.EncodeToString([]byte(target))
+	WriteHttpRequest(conn, "/conn", []byte(baseResult))
 	_, ok := ParseHttpResponse(conn, &buff)
 	if false == ok {
 		return errors.New("Dial LogError")
