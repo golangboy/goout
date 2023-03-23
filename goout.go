@@ -2,6 +2,7 @@ package goout
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"net"
 	"strconv"
@@ -23,7 +24,9 @@ func (g *GoOutCli) Dial(gooutServer string, target string) error {
 		return err
 	}
 	g.conn = conn
-	WriteHttpRequest(conn, "/conn", []byte(target))
+	var baseResult [100]byte
+	base64.StdEncoding.Encode(baseResult[:], []byte(target))
+	WriteHttpRequest(conn, "/conn", baseResult[:])
 	_, ok := ParseHttpResponse(conn, &buff)
 	if false == ok {
 		return errors.New("Dial LogError")

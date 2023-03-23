@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"goout"
@@ -147,7 +148,14 @@ func handleTCP(tcp *net.TCPConn) {
 		}
 		path := req.Url
 		if path == "/conn" {
-			targetHost = string(req.Body)
+			var baseResult [100]byte
+			n, err := base64.StdEncoding.Decode(baseResult[:], req.Body)
+			// 旧版本客户端不用base64编码
+			if err == nil {
+				targetHost = string(baseResult[:n])
+			} else {
+				targetHost = string(req.Body)
+			}
 			tcpAddr, err := net.ResolveTCPAddr("tcp4", targetHost)
 			if err != nil {
 				return
