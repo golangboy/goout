@@ -32,6 +32,6 @@ jobs:
       with:
         name: ${{github.ref_name}}
         files: |
-                ~/server 
-                ~/client
+                server 
+                client
         tag_name: "Release"
