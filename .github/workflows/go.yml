@@ -22,10 +22,10 @@ jobs:
         go-version: 1.19
 
     - name: Build
-      run: cd cmd/server && go build -o ~/server .
+      run: go build -o server ./cmd/server 
 
     - name: Build
-      run: cd cmd/client && go build -o ~/client .
+      run: go build -o client ./cmd/client 
       
     - name: Create Release
       uses: softprops/action-gh-release@v0.1.15
