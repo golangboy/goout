@@ -25,7 +25,7 @@ jobs:
       run: cd cmd/server && go build -o ~/server .
 
     - name: Build
-      run: cd cmd/client && go build -o ~/server .
+      run: cd cmd/client && go build -o ~/client .
       
     - name: Create Release
       uses: softprops/action-gh-release@v0.1.15
